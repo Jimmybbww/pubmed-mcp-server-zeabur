@@ -1,74 +1,127 @@
-// 處理 Zeabur 的特殊環境變數格式
-function getActualPort() {
-  const portEnv = process.env.PORT || process.env.WEB_PORT || '8080';
+const http = require('http');
+
+// Zeabur 提供的端口
+const PORT = process.env.PORT || 8080;
+
+console.log('=== Starting PubMed MCP Server ===');
+console.log('Environment PORT:', process.env.PORT);
+console.log('Using PORT:', PORT);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
+// 建立服務器
+const server = http.createServer((req, res) => {
+  const now = new Date().toISOString();
+  console.log(`[${now}] ${req.method} ${req.url}`);
   
-  // 如果是 ${WEB_PORT} 格式，就使用默認端口
-  if (typeof portEnv === 'string' && portEnv.includes('${')) {
-    console.log('Detected template variable, using default port 8080');
-    return '8080';
-  }
+  // 設定 CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
-  return portEnv.toString();
-}
-
-const PORT = getActualPort();
-
-console.log('Environment variables:');
-console.log('Raw PORT:', process.env.PORT);
-console.log('Raw WEB_PORT:', process.env.WEB_PORT);
-console.log('Final port:', PORT);
-
-// 設定環境變數
-process.env.MCP_TRANSPORT_TYPE = 'http';
-process.env.MCP_HTTP_PORT = PORT;
-process.env.MCP_HTTP_HOST = '0.0.0.0';
-process.env.MCP_LOG_LEVEL = 'info';
-process.env.MCP_ALLOWED_ORIGINS = '*';
-
-console.log('Starting PubMed MCP Server with port:', PORT);
-
-// 保持進程活躍的簡單方法
-const server = require('http').createServer((req, res) => {
-  // 簡單的健康檢查端點
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', port: PORT }));
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
     return;
   }
   
-  // 對於其他請求，返回 MCP 信息
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ 
-    message: 'PubMed MCP Server', 
-    port: PORT,
-    endpoints: ['/messages', '/health']
+  // 健康檢查
+  if (req.url === '/' || req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const response = {
+      status: 'healthy',
+      service: 'PubMed MCP Server',
+      port: PORT,
+      time: now,
+      uptime: process.uptime()
+    };
+    res.end(JSON.stringify(response, null, 2));
+    return;
+  }
+  
+  // MCP 訊息端點
+  if (req.url === '/messages') {
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          message: 'MCP endpoint received',
+          received: body,
+          time: now
+        }));
+      });
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'MCP Messages endpoint ready',
+        methods: ['POST'],
+        time: now
+      }));
+    }
+    return;
+  }
+  
+  // 404 for other routes
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    error: 'Not Found',
+    path: req.url,
+    available: ['/', '/health', '/messages']
   }));
 });
 
-// 啟動 HTTP 服務器
-server.listen(parseInt(PORT), '0.0.0.0', () => {
-  console.log(`Server listening on 0.0.0.0:${PORT}`);
-  
-  // 在服務器啟動後再啟動 MCP Server
-  try {
-    require('@cyanheads/pubmed-mcp-server');
-    console.log('PubMed MCP Server integration loaded');
-  } catch (error) {
-    console.error('Failed to load MCP Server:', error);
-  }
+// 啟動服務器
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ HTTP Server started successfully`);
+  console.log(`✅ Listening on: 0.0.0.0:${PORT}`);
+  console.log(`✅ Health check: http://localhost:${PORT}/health`);
+  console.log(`✅ MCP endpoint: http://localhost:${PORT}/messages`);
+  console.log('=== Server Ready ===');
 });
 
-// 優雅關閉
+// 監聽服務器事件
+server.on('error', (err) => {
+  console.error('❌ Server error:', err);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`);
+  }
+  process.exit(1);
+});
+
+server.on('listening', () => {
+  const address = server.address();
+  console.log(`🎯 Server is listening on ${address.address}:${address.port}`);
+});
+
+// 進程事件處理
 process.on('SIGTERM', () => {
-  console.log('Received SIGTERM, shutting down gracefully');
+  console.log('📝 Received SIGTERM signal, shutting down gracefully');
   server.close(() => {
+    console.log('✅ Server closed');
     process.exit(0);
   });
 });
 
 process.on('SIGINT', () => {
-  console.log('Received SIGINT, shutting down gracefully');
+  console.log('📝 Received SIGINT signal, shutting down gracefully');
   server.close(() => {
+    console.log('✅ Server closed');
     process.exit(0);
   });
 });
+
+// 錯誤處理
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+console.log('🚀 Application initialized, waiting for server to start...');
