@@ -1,19 +1,34 @@
+const PORT = process.env.PORT || process.env.WEB_PORT || 3017;
+
+console.log('Environment variables:');
+console.log('PORT:', process.env.PORT);
+console.log('WEB_PORT:', process.env.WEB_PORT);
+console.log('Using port:', PORT);
+
 // 設定環境變數
-process.env.MCP_TRANSPORT_TYPE = 'http';
-process.env.MCP_HTTP_PORT = process.env.PORT || '3017';
-process.env.MCP_HTTP_HOST = '0.0.0.0';
-process.env.MCP_LOG_LEVEL = 'info';
-process.env.MCP_ALLOWED_ORIGINS = '*';
+Object.assign(process.env, {
+  MCP_TRANSPORT_TYPE: 'http',
+  MCP_HTTP_PORT: PORT.toString(),
+  MCP_HTTP_HOST: '0.0.0.0',
+  MCP_LOG_LEVEL: 'info',
+  MCP_ALLOWED_ORIGINS: '*'
+});
 
-console.log('Starting PubMed MCP Server...');
-console.log('Port:', process.env.MCP_HTTP_PORT);
-console.log('Host:', process.env.MCP_HTTP_HOST);
+// 啟動服務器
+const { spawn } = require('child_process');
 
-// 啟動 MCP Server
-try {
-  require('@cyanheads/pubmed-mcp-server');
-  console.log('PubMed MCP Server started successfully');
-} catch (error) {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-}
+const server = spawn('npx', ['@cyanheads/pubmed-mcp-server'], {
+  stdio: 'inherit',
+  env: process.env
+});
+
+server.on('error', (err) => {
+  console.error('Server error:', err);
+});
+
+server.on('close', (code) => {
+  console.log(`Server exited with code ${code}`);
+  if (code !== 0) {
+    process.exit(code);
+  }
+});
