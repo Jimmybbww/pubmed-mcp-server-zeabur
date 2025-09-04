@@ -1,0 +1,19 @@
+{
+  "name": "pubmed-mcp-server-zeabur",
+  "version": "1.0.0",
+  "description": "PubMed MCP Server for Zeabur deployment - provides biomedical literature search capabilities via HTTP API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "@cyanheads/pubmed-mcp-server": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["mcp", "pubmed", "biomedical", "literature", "search", "api"],
+  "author": "Jimmybbww",
+  "license": "MIT"
+}
