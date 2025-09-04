@@ -1,7 +1,7 @@
 const http = require('http');
 
 // Zeabur 提供的端口
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3017;
 
 console.log('=== Starting PubMed MCP Server ===');
 console.log('Environment PORT:', process.env.PORT);
